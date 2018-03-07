@@ -7,19 +7,6 @@ module xlld.wrap.wrap;
 import xlld.wrap.worksheet;
 import xlld.sdk.xlcall: XLOPER12;
 
-version(testingExcelD) {
-    import xlld.conv: toXlOper;
-    import xlld.test.util: shouldEqualDlang, toSRef, MockXlFunction;
-    import unit_threaded;
-    import std.experimental.allocator.gc_allocator: GCAllocator;
-    alias theGC = GCAllocator.instance;
-
-} else
-      enum Serial;
-
-static if(!is(Flaky))
-    enum Flaky;
-
 
 private template isWorksheetFunction(alias F) {
     import xlld.wrap.traits: isSupportedFunction;
@@ -39,7 +26,6 @@ private template isWorksheetFunction(alias F) {
 
 }
 
-
 @("isWorksheetFunction")
 @safe pure unittest {
     static import test.d_funcs;
@@ -53,6 +39,7 @@ private template isWorksheetFunction(alias F) {
     static assert(isWorksheetFunction!(test.d_funcs.DateTimeToDouble));
     static assert(isWorksheetFunction!(test.d_funcs.BoolToInt));
 }
+
 
 /**
    A string to mixin that wraps all eligible functions in the
@@ -227,32 +214,6 @@ void wrapAsync(alias F, A, T...)(ref A allocator, immutable XLOPER12 asyncHandle
 }
 
 
-// this has to be a top-level function and can't be declared in the unittest
-version(testingExcelD) private double twice(double d) { return d * 2; }
-
-///
-@Flaky
-@("wrapAsync")
-@system unittest {
-    import xlld.test.util: asyncReturn, newAsyncHandle;
-    import xlld.conv.from: fromXlOper;
-    import core.time: MonoTime;
-    import core.thread;
-
-    const start = MonoTime.currTime;
-    auto asyncHandle = newAsyncHandle;
-    auto oper = (3.2).toXlOper(theGC);
-    wrapAsync!twice(theGC, cast(immutable)asyncHandle, oper);
-    const expected = 6.4;
-    while(asyncReturn(asyncHandle).fromXlOper!double(theGC) != expected &&
-          MonoTime.currTime - start < 1.seconds)
-    {
-        Thread.sleep(10.msecs);
-    }
-    asyncReturn(asyncHandle).shouldEqualDlang(expected);
-}
-
-
 void wrapAsyncImpl(alias F, A, T)(ref A allocator, XLOPER12 asyncHandle, T dArgs) {
     import xlld.sdk.framework: Excel12f;
     import xlld.sdk.xlcall: xlAsyncReturn;
@@ -306,8 +267,8 @@ XLOPER12* wrapModuleFunctionImpl(alias wrappedFunc, A, T...)
    Converts a variadic number of XLOPER12* to their equivalent D types
    and returns a tuple
  */
-private auto toDArgs(alias wrappedFunc, A, T...)
-                    (ref A allocator, T args)
+auto toDArgs(alias wrappedFunc, A, T...)
+            (ref A allocator, T args)
 {
     import xlld.func.xl: coerce, free;
     import xlld.sdk.xlcall: XlType;
@@ -346,27 +307,6 @@ private auto toDArgs(alias wrappedFunc, A, T...)
     return dArgs;
 }
 
-
-@("xltypeNum can convert to array")
-unittest {
-    import std.typecons: tuple;
-
-    void fun(double[] arg) {}
-    auto arg = 33.3.toSRef(theGC);
-    toDArgs!fun(theGC, &arg).shouldEqual(tuple([33.3]));
-}
-
-@("xltypeNil can convert to array")
-unittest {
-    import xlld.sdk.xlcall: XlType;
-    import std.typecons: tuple;
-
-    void fun(double[] arg) {}
-    XLOPER12 arg;
-    arg.xltype = XlType.xltypeNil;
-    double[] empty;
-    toDArgs!fun(theGC, &arg).shouldEqual(tuple(empty));
-}
 
 // Takes a tuple returned by `toDArgs`, calls the wrapped function and returns
 // the XLOPER12 result
@@ -418,7 +358,7 @@ private XLOPER12 stringOper(in string msg) @safe @nogc nothrow {
 
 
 // get excel return value from D return value of wrapped function
-private XLOPER12 excelRet(T)(T wrappedRet) {
+XLOPER12 excelRet(T)(T wrappedRet) {
 
     import xlld.conv: toAutoFreeOper;
     import xlld.conv.misc: stripMemoryBitmask;
@@ -462,76 +402,6 @@ private XLOPER12 excelRet(T)(T wrappedRet) {
     return ret;
 }
 
-@("excelRet!double[] from row caller")
-unittest {
-    import xlld.sdk.xlcall: XlType, xlfCaller;
-    import xlld.conv.misc: stripMemoryBitmask;
-    import xlld.memorymanager: autoFree;
-
-    XLOPER12 caller;
-    caller.xltype = XlType.xltypeSRef;
-    caller.val.sref.ref_.rwFirst = 1;
-    caller.val.sref.ref_.rwLast = 1;
-    caller.val.sref.ref_.colFirst = 2;
-    caller.val.sref.ref_.colLast = 4;
-
-    with(MockXlFunction(xlfCaller, caller)) {
-        auto doubles = [1.0, 2.0, 3.0, 4.0];
-        auto oper = excelRet(doubles);
-        scope(exit) autoFree(&oper);
-
-        oper.shouldEqualDlang(doubles);
-        oper.xltype.stripMemoryBitmask.shouldEqual(XlType.xltypeMulti);
-        oper.val.array.rows.shouldEqual(1);
-        oper.val.array.columns.shouldEqual(4);
-    }
-}
-
-@("excelRet!double[] from column caller")
-unittest {
-    import xlld.sdk.xlcall: XlType, xlfCaller;
-    import xlld.conv.misc: stripMemoryBitmask;
-    import xlld.memorymanager: autoFree;
-
-    XLOPER12 caller;
-    caller.xltype = XlType.xltypeSRef;
-    caller.val.sref.ref_.rwFirst = 1;
-    caller.val.sref.ref_.rwLast = 4;
-    caller.val.sref.ref_.colFirst = 5;
-    caller.val.sref.ref_.colLast = 5;
-
-    with(MockXlFunction(xlfCaller, caller)) {
-        auto doubles = [1.0, 2.0, 3.0, 4.0];
-        auto oper = excelRet(doubles);
-        scope(exit) autoFree(&oper);
-
-        oper.shouldEqualDlang(doubles);
-        oper.xltype.stripMemoryBitmask.shouldEqual(XlType.xltypeMulti);
-        oper.val.array.rows.shouldEqual(4);
-        oper.val.array.columns.shouldEqual(1);
-    }
-}
-
-@("excelRet!double[] from other caller")
-unittest {
-    import xlld.sdk.xlcall: XlType, xlfCaller;
-    import xlld.conv.misc: stripMemoryBitmask;
-    import xlld.memorymanager: autoFree;
-
-    XLOPER12 caller;
-    caller.xltype = XlType.xltypeErr;
-
-    with(MockXlFunction(xlfCaller, caller)) {
-        auto doubles = [1.0, 2.0, 3.0, 4.0];
-        auto oper = excelRet(doubles);
-        scope(exit) autoFree(&oper);
-
-        oper.shouldEqualDlang(doubles);
-        oper.xltype.stripMemoryBitmask.shouldEqual(XlType.xltypeMulti);
-        oper.val.array.rows.shouldEqual(1);
-        oper.val.array.columns.shouldEqual(4);
-    }
-}
 
 
 
