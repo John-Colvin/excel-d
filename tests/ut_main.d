@@ -15,5 +15,6 @@ int main(string[] args)
         "xlld.conv.misc",
         "ut.wrap.module_",
         "ut.wrap.all",
+        "ut.conv.from",
     );
 }
