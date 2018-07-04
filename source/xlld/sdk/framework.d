@@ -5,7 +5,18 @@ module xlld.sdk.framework;
 
 
 import xlld.sdk.xlcall;
+import std.stdio;
 
+struct DebugOutput
+{
+    static void write(Args ...)(Args args)
+    {
+        import xlld.sdk.xll : log;
+        log(args);
+    }
+}
+
+DebugOutput debugOutput;
 
 /**
         Will free any malloc'd memory associated with the given
@@ -15,24 +26,44 @@ import xlld.sdk.xlcall;
 
         LPXLOPER pxloper    Pointer to the XLOPER whose associated
 */
-void freeXLOper(T, A)(T pxloper, ref A allocator)
+void freeXLOper(T, A)(T pxloper, ref A allocator) nothrow
     if(is(T == LPXLOPER) || is(T == LPXLOPER12))
 {
-    import std.experimental.allocator: dispose;
 
+    import xlld.sdk.xll : log;
+    void report() nothrow
+    {
+        try
+        {
+            //allocator.reportPerCallStatistics(debugOutput);
+            //allocator.reportStatistics(debugOutput);
+        }
+        catch(Exception e) { log(e.msg); }
+    }
+
+    report();
+
+    //log(pxloper.xltype & ~XlType.xlbitDLLFree);
+
+    import std.experimental.allocator: dispose;
     switch (pxloper.xltype & ~XlType.xlbitDLLFree) with(XlType) {
         case xltypeStr:
             if (pxloper.val.str !is null) {
                 void* bytesPtr = pxloper.val.str;
                 const numBytes = (pxloper.val.str[0] + 1) * wchar.sizeof;
                 allocator.dispose(bytesPtr[0 .. numBytes]);
+                log("str ", bytesPtr, " ", numBytes);
             }
             break;
         case xltypeRef:
             if (pxloper.val.mref.lpmref !is null)
+            {
                 allocator.dispose(pxloper.val.mref.lpmref);
+                log("Ref ", pxloper.val.mref.lpmref);
+            }
             break;
         case xltypeMulti:
+            log(pxloper.val.array.rows, " x ", pxloper.val.array.columns);
             auto cxloper = pxloper.val.array.rows * pxloper.val.array.columns;
             const numOpers = cxloper;
             if (pxloper.val.array.lparray !is null)
@@ -45,15 +76,23 @@ void freeXLOper(T, A)(T pxloper, ref A allocator)
                     cxloper--;
                 }
                 allocator.dispose(pxloper.val.array.lparray[0 .. numOpers]);
+                log("Multi ", pxloper.val.array.lparray, " ", numOpers);
             }
             break;
         case xltypeBigData:
             if (pxloper.val.bigdata.h.lpbData !is null)
+            {
                 allocator.dispose(pxloper.val.bigdata.h.lpbData);
+                log("BigData ", pxloper.val.bigdata.h.lpbData);
+            }
             break;
         default: // todo: add error handling
             break;
     }
+
+    report();
+
+    //log("\n");
 }
 
 @("Free regular XLOPER")

@@ -131,6 +131,8 @@ extern(Windows) int xlAutoFree12(LPXLOPER12 arg) nothrow {
     import xlld.memorymanager: autoFree;
     import xlld.sdk.xlcall: xlbitDLLFree;
 
+    log("xlAutoFree12");
+
     if(!(arg.xltype & xlbitDLLFree)) {
         log("[ERROR]: Trying to free XLOPER12 without xlbitDLLFree, ignoring");
         return 0;

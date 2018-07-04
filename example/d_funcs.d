@@ -291,3 +291,40 @@ auto FuncComplexTupleRet(int d1, int d2) @safe {
     return tuple([DateTime(2017, 1, d1), DateTime(2017, 2, d1)],
                  [DateTime(2018, 1, d1), DateTime(2018, 2, d2)]);
 }
+
+
+auto MkArray(int len)
+{
+    import std.range : iota, repeat;
+    import std.array : array;
+
+    import xlld.sdk.xll : log;
+    import core.memory : GC;
+
+    GC.collect();
+    GC.minimize();
+
+    log(GC.stats);
+
+    auto data = repeat(4, len).array;
+
+    log(GC.stats);
+
+    return data;
+}
+
+@Dispose!((ret) {
+    import std.experimental.allocator.mallocator: Mallocator;
+    import std.experimental.allocator: dispose;
+    Mallocator.instance.dispose(ret);
+})
+double[] MkArray2(int len) /*@nogc*/ @safe nothrow {
+    import std.experimental.allocator.mallocator: Mallocator;
+    import std.experimental.allocator: makeArray;
+
+    try {
+        return Mallocator.instance.makeArray!double(len, 4);
+    } catch(Exception _) {
+        return [];
+    }
+}

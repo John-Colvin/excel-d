@@ -18,13 +18,20 @@ import std.algorithm.comparison: max;
 import std.traits: isArray;
 import std.meta: allSatisfy;
 
-///
-alias allocator = Mallocator.instance;
-///
-alias autoFreeAllocator = Mallocator.instance;
+import std.experimental.allocator.building_blocks.stats_collector;
 
 ///
-alias MemoryPool = AllocatorList!((size_t n) => Region!Mallocator(max(n, size_t(1024 * 1024))), Mallocator);
+alias Allocator = StatsCollector!(Mallocator, Options.bytesUsed);
+
+Allocator allocator;
+///
+alias AutoFreeAllocator = StatsCollector!(Mallocator, Options.bytesUsed);
+
+AutoFreeAllocator autoFreeAllocator;
+
+///
+alias MemoryPool = StatsCollector!(AllocatorList!((size_t n) => Region!Mallocator(max(n, size_t(1024 * 1024))), Mallocator), Options.bytesUsed);
+
 ///
 MemoryPool gTempAllocator;
 
